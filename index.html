@@ -315,9 +315,9 @@
 
     <!-- Tabs -->
     <div class="tabs">
-        <button class="tab-btn active" onclick="cambiarTab('todos')">Todos</button>
-        <button class="tab-btn" onclick="cambiarTab('amigos')">Tendencia</button>
-        <button class="tab-btn" onclick="cambiarTab('siguiendo')">Recientes</button>
+        <button class="tab-btn active" onclick="cambiarTab('todos', event)">Todos</button>
+        <button class="tab-btn" onclick="cambiarTab('tendencia', event)">Tendencia</button>
+        <button class="tab-btn" onclick="cambiarTab('recientes', event)">Recientes</button>
     </div>
 
     <!-- Feed -->
@@ -341,7 +341,7 @@
 
     <!-- Bottom Navigation -->
     <div class="bottom-nav">
-        <div class="nav-item active" onclick="cambiarTab('todos')">
+        <div class="nav-item active" onclick="cambiarTab('todos', event)">
             <span class="nav-item-icon">🏠</span>
             <span>Inicio</span>
         </div>
@@ -453,10 +453,6 @@
             setTimeout(() => toast.remove(), 3000);
         }
 
-        function solicitarConfirmacion(titulo, msg, callback) {
-            if (confirm(`${titulo}\n\n${msg}`)) callback();
-        }
-
         function abrirModalGeneral(id) {
             document.getElementById(id).classList.add('visible');
         }
@@ -465,12 +461,12 @@
             document.getElementById(id).classList.remove('visible');
         }
 
-        function cambiarTab(tab) {
+        function cambiarTab(tab, event) {
             tabActual = tab;
             paginaActual = 0;
             cargarPosts();
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            event.target.classList.add('active');
+            if (event && event.target) event.target.classList.add('active');
         }
 
         function limpiarFiltros() {
@@ -487,7 +483,8 @@
         // =====================================================================
         async function cargarPosts() {
             try {
-                let query = db.from('publicaciones').select('*').order('created_at', { ascending: false });
+                // Ordenar por fecha_creacion descendente
+                let query = db.from('publicaciones').select('*').order('fecha_creacion', { ascending: false });
 
                 const reportados = obtenerPostsReportados();
                 if (reportados.length > 0) {
@@ -498,11 +495,27 @@
                 if (error) throw error;
 
                 let postsFiltered = posts || [];
+
                 if (filtroTexto) {
                     postsFiltered = postsFiltered.filter(p => p.contenido.toLowerCase().includes(filtroTexto.toLowerCase()));
                 }
                 if (filtroFecha) {
-                    postsFiltered = postsFiltered.filter(p => new Date(p.created_at).toDateString() === new Date(filtroFecha).toDateString());
+                    postsFiltered = postsFiltered.filter(p => new Date(p.fecha_creacion).toDateString() === new Date(filtroFecha).toDateString());
+                }
+
+                // Tab tendencia: ordenar por cantidad de reacciones
+                if (tabActual === 'tendencia') {
+                    const { data: reacciones } = await db.from('reacciones').select('id_publicacion');
+                    const conteo = {};
+                    (reacciones || []).forEach(r => {
+                        conteo[r.id_publicacion] = (conteo[r.id_publicacion] || 0) + 1;
+                    });
+                    postsFiltered.sort((a, b) => (conteo[b.id] || 0) - (conteo[a.id] || 0));
+                }
+
+                // Tab recientes: ya viene ordenado por fecha desc, pero lo forzamos
+                if (tabActual === 'recientes') {
+                    postsFiltered.sort((a, b) => new Date(b.fecha_creacion) - new Date(a.fecha_creacion));
                 }
 
                 const inicio = paginaActual * POSTS_POR_PAGINA;
@@ -512,8 +525,13 @@
                 const feed = document.getElementById('feed');
                 feed.innerHTML = '';
 
+                if (postsPagina.length === 0) {
+                    feed.innerHTML = '<p style="color: #555; text-align: center; margin-top: 40px;">No hay chismes todavía. ¡Sé el primero!</p>';
+                }
+
                 for (const post of postsPagina) {
-                    const { data: comentarios } = await db.from('comentarios').select('*').eq('id_post', post.id).order('created_at', { ascending: true });
+                    // Usar id_publicacion en comentarios
+                    const { data: comentarios } = await db.from('comentarios').select('*').eq('id_publicacion', post.id).order('fecha_creacion', { ascending: true });
                     feed.appendChild(crearCardPost(post, comentarios || []));
                 }
 
@@ -529,7 +547,8 @@
             card.id = `post-${post.id}`;
             card.className = 'card';
 
-            const fecha = new Date(post.created_at);
+            // Usar fecha_creacion
+            const fecha = new Date(post.fecha_creacion);
             const horaFormato = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
             card.innerHTML = `
@@ -543,10 +562,10 @@
                         <div class="post-hora">${horaFormato}</div>
                     </div>
                     <div class="post-menu">
-                        <button class="btn-menu" onclick="toggleMenu(${post.id})">⋮</button>
+                        <button class="btn-menu" onclick="toggleMenu('${post.id}')">⋮</button>
                         <div class="menu-opciones" id="menu-${post.id}">
-                            ${post.id_autor === MI_ID ? `<button onclick="borrarPost(${post.id})">Borrar</button>` : ''}
-                            <button class="peligro" onclick="reportarPost(${post.id})">Reportar</button>
+                            ${post.id_autor === MI_ID ? `<button onclick="borrarPost('${post.id}')">Borrar</button>` : ''}
+                            <button class="peligro" onclick="reportarPost('${post.id}')">Reportar</button>
                         </div>
                     </div>
                 </div>
@@ -556,7 +575,7 @@
                 <div class="comentarios-container" id="comentarios-${post.id}"></div>
                 <div class="reply-section">
                     <input type="text" class="reply-input" placeholder="Comenta algo..." id="reply-input-${post.id}">
-                    <button class="btn-responder" onclick="enviarComentario(${post.id})">Comentar</button>
+                    <button class="btn-responder" onclick="enviarComentario('${post.id}')">Comentar</button>
                 </div>
             `;
 
@@ -570,22 +589,22 @@
             const reacciones = ['✅', '❌', '😂', '😢', '🤬'];
             const container = card.querySelector(`#reactions-${postId}`);
 
-            const { data: reaccs } = await db.from('reacciones').select('*').eq('id_post', postId);
+            // Usar id_publicacion en reacciones
+            const { data: reaccs } = await db.from('reacciones').select('*').eq('id_publicacion', postId);
             const reaccionesActuales = reaccs || [];
 
             for (const emoji of reacciones) {
-                const count = reaccionesActuales.filter(r => r.emoji === emoji).length;
-                const yaReaccione = reaccionesActuales.some(r => r.emoji === emoji && r.id_usuario === MI_ID);
+                const count = reaccionesActuales.filter(r => r.tipo === emoji).length;
+                const yaReaccione = reaccionesActuales.some(r => r.tipo === emoji && r.id_usuario === MI_ID);
 
                 const btn = document.createElement('button');
                 btn.className = `reaction-btn ${yaReaccione ? 'active' : ''}`;
-                btn.classList.add('btn-pop');
                 btn.innerHTML = `<span class="reaction-emoji">${emoji}</span><span class="reaction-count">${count}</span>`;
                 btn.onclick = async () => {
                     if (yaReaccione) {
-                        await db.from('reacciones').delete().eq('id_post', postId).eq('emoji', emoji).eq('id_usuario', MI_ID);
+                        await db.from('reacciones').delete().eq('id_publicacion', postId).eq('tipo', emoji).eq('id_usuario', MI_ID);
                     } else {
-                        await db.from('reacciones').insert([{ id_post: postId, emoji, id_usuario: MI_ID }]);
+                        await db.from('reacciones').insert([{ id_publicacion: postId, tipo: emoji, id_usuario: MI_ID }]);
                     }
                     cargarPosts();
                 };
@@ -604,7 +623,8 @@
             }
 
             for (const com of comentarios.slice(0, 5)) {
-                const fecha = new Date(com.created_at);
+                // Usar fecha_creacion en comentarios
+                const fecha = new Date(com.fecha_creacion);
                 const hora = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
 
                 const divCom = document.createElement('div');
@@ -616,10 +636,10 @@
                             <span class="comentario-hora">${hora}</span>
                         </div>
                         <div class="comentario-menu">
-                            <button class="btn-menu-comentario" onclick="toggleMenuComentario(${com.id})">⋮</button>
+                            <button class="btn-menu-comentario" onclick="toggleMenuComentario('${com.id}')">⋮</button>
                             <div class="menu-opciones" id="menu-com-${com.id}">
-                                ${com.id_autor === MI_ID ? `<button onclick="borrarComentario(${com.id})">Borrar</button>` : ''}
-                                <button class="peligro" onclick="reportarComentario(${com.id})">Reportar</button>
+                                ${com.id_autor === MI_ID ? `<button onclick="borrarComentario('${com.id}')">Borrar</button>` : ''}
+                                <button class="peligro" onclick="reportarComentario('${com.id}')">Reportar</button>
                             </div>
                         </div>
                     </div>
@@ -652,8 +672,9 @@
             const texto = input.value.trim();
             if (!texto) return;
 
+            // Usar id_publicacion en comentarios
             const { error } = await db.from('comentarios').insert([{
-                id_post: postId,
+                id_publicacion: postId,
                 id_autor: MI_ID,
                 contenido: texto
             }]);
@@ -708,7 +729,7 @@
         // NOTIFICACIONES
         // =====================================================================
         async function chequearNotificaciones() {
-            const { data: notifs } = await db.from('notificaciones').select('*').eq('id_usuario', MI_ID).order('created_at', { ascending: false });
+            const { data: notifs } = await db.from('notificaciones').select('*').eq('id_usuario', MI_ID).order('fecha_creacion', { ascending: false });
             const lista = document.getElementById('lista-notificaciones');
             lista.innerHTML = '';
 
@@ -841,17 +862,20 @@
         }
 
         async function obtenerUsuariosActivos() {
-            const { data: usuarios } = await db.from('presencia').select('*').gt('ultima_actividad', new Date(Date.now() - 5 * 60 * 1000).toISOString());
-            const count = usuarios?.length || 0;
-            document.getElementById('online-count').textContent = `${count} online`;
+            try {
+                const { data: usuarios } = await db.from('presencia').select('*').gt('ultima_actividad', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+                const count = usuarios?.length || 0;
+                document.getElementById('online-count').textContent = `${count} online`;
+            } catch(e) {}
         }
 
         async function actualizarPresencia() {
-            const { error } = await db.from('presencia').upsert({
-                id_usuario: MI_ID,
-                ultima_actividad: new Date().toISOString()
-            });
-            if (error) console.error('Error actualizando presencia:', error);
+            try {
+                await db.from('presencia').upsert({
+                    id_usuario: MI_ID,
+                    ultima_actividad: new Date().toISOString()
+                });
+            } catch(e) {}
         }
 
         function publicarChisme() {
@@ -893,7 +917,6 @@
             cargarPosts();
         });
 
-        // Actualizar contador de caracteres
         document.addEventListener('input', (e) => {
             if (e.target.id === 'texto-nuevo-chisme') {
                 const count = e.target.value.length;
@@ -901,7 +924,6 @@
             }
         });
 
-        // Cerrar menus al hacer click afuera
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.post-menu') && !e.target.closest('.menu-opciones')) {
                 document.querySelectorAll('.menu-opciones').forEach(m => m.style.display = 'none');
