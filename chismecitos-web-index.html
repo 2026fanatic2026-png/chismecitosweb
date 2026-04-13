@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#000000">
+    <meta name="description" content="Chismecitos - Contalo sin miedo. La red social anónima para chismes y gossip de tu comunidad.">
+    
+    <title>Chismecitos - Contalo sin miedo</title>
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Google AdSense/AdMob para web -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3371788247358319"
+     crossorigin="anonymous"></script>
+    
+    <style>
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { from { transform: scale(1); opacity: 0.8; } to { transform: scale(1.05); opacity: 1; } }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        @keyframes btn-pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 70% { transform: scale(0.9); } 100% { transform: scale(1); } }
+        @keyframes particula-volar {
+            0%   { opacity: 1; transform: translate(0, 0) scale(1); }
+            100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0.3); }
+        }
+        .particula {
+            position: fixed; pointer-events: none; z-index: 9999;
+            font-size: 1.2rem; animation: particula-volar 0.7s ease-out forwards;
+        }
+        .btn-pop { animation: btn-pop 0.35s ease; }
+
+        #status-online {
+            position: fixed; top: 15px; left: 15px;
+            z-index: 2500; background: rgba(255, 255, 255, 0.1);
+            padding: 4px 10px; border-radius: 20px; display: flex;
+            align-items: center; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .punto-verde {
+            height: 7px; width: 7px; background-color: #2ecc71;
+            border-radius: 50%; display: inline-block; margin-right: 6px;
+            box-shadow: 0 0 8px #2ecc71; animation: blink 2s infinite;
+        }
+        #online-count { font-size: 10px; font-weight: bold; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        #splash-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #000; display: flex; justify-content: center;
+            align-items: center; z-index: 3000; transition: opacity 0.8s ease, visibility 0.8s;
+        }
+        .splash-contenido { text-align: center; animation: pulse 1.5s infinite alternate; }
+        .splash-logo { width: 120px; height: auto; margin-bottom: 15px; border-radius: 20%; }
+        .splash-titulo { font-size: 3rem; margin: 0; color: #fff; letter-spacing: -2px; }
+        .splash-subtitulo { font-size: 1rem; color: #666; margin-top: 5px; font-style: italic; }
+        .splash-hidden { opacity: 0; visibility: hidden; }
+
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.98); display: none;
+            justify-content: center; align-items: center; z-index: 5000; padding: 20px; box-sizing: border-box;
+        }
+        .modal-contenido {
+            background: #111; border: 1px solid #333; padding: 25px;
+            border-radius: 20px; max-width: 400px; width: 100%; text-align: left;
+            animation: fadeIn 0.5s ease;
+        }
+        .modal-contenido h2 { margin-top: 0; font-size: 1.4rem; color: #fff; border-bottom: 1px solid #222; padding-bottom: 10px; }
+        .texto-terminos { color: #aaa; font-size: 0.85rem; line-height: 1.5; margin: 20px 0; }
+        .texto-terminos ul { padding-left: 15px; }
+        .modal-botones { display: flex; gap: 10px; }
+        .btn-aceptar { flex: 2; padding: 14px; background: #fff; color: #000; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
+        .btn-rechazar { flex: 1; padding: 14px; background: #1a1a1a; color: #555; border: none; border-radius: 12px; cursor: pointer; }
+
+        .app-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); display: none;
+            justify-content: center; align-items: center; z-index: 4000; padding: 20px; box-sizing: border-box;
+        }
+        #modal-publicar {
+            align-items: flex-end;
+        }
+        .modal-box {
+            background: #111; border: 1px solid #333; padding: 20px;
+            border-radius: 20px; max-width: 400px; width: 100%; animation: fadeIn 0.3s ease;
+            max-height: 90vh; overflow-y: auto;
+        }
+        .textarea-pub {
+            width: 100%; height: 120px; background: #000; color: #fff; border: 1px solid #333;
+            border-radius: 12px; padding: 12px; box-sizing: border-box; font-size: 1rem; outline: none; resize: none;
+        }
+
+        body {
+            background-color: #000; color: #fff; font-family: 'Segoe UI', sans-serif; margin: 0;
+            padding: 0 20px 160px 20px;
+            display: flex; flex-direction: column; align-items: center; overflow-x: hidden;
+            box-sizing: border-box; min-height: 100vh;
+        }
+
+        .header-container { 
+            position: sticky; top: 0; width: 100%; max-width: 500px; text-align: center; 
+            background-color: #000; z-index: 1000; 
+            padding: 15px 0 10px 0;
+            border-bottom: 1px solid #111;
+        }
+        .logo-clickable {
+            cursor: pointer; display: inline-flex; align-items: center;
+            justify-content: center; transition: opacity 0.2s; user-select: none;
+        }
+        .logo-clickable:active { opacity: 0.6; }
+        .logo-header { width: 30px; height: 30px; vertical-align: middle; margin-right: 8px; border-radius: 8px; }
+        h1 { font-size: 1.6rem; margin: 0; color: #eee; letter-spacing: -1px; display: flex; align-items: center; justify-content: center; outline: none; }
+
+        .nav-icons { position: absolute; right: 0; display: flex; gap: 15px; top: 15px; }
+        .btn-icon { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #888; position: relative; transition: 0.3s; }
+        .badge { position: absolute; top: -2px; right: -2px; background: red; width: 10px; height: 10px; border-radius: 50%; display: none; border: 2px solid #000; }
+
+        #panel-notificaciones {
+            display: none; position: absolute; top: calc(100% + 8px); right: 0; background: #111; border: 1px solid #333;
+            width: 260px; border-radius: 12px; z-index: 1100; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            max-height: 300px; overflow-y: auto; animation: fadeIn 0.3s ease;
+        }
+        .notif-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 12px; border-bottom: 1px solid #222; position: sticky; top: 0; background: #111;
+        }
+        .notif-header span { font-size: 0.75rem; color: #666; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn-borrar-notifs {
+            background: none; border: none; color: #e74c3c; font-size: 0.75rem;
+            cursor: pointer; font-weight: bold; padding: 2px 6px; border-radius: 6px;
+            transition: background 0.2s;
+        }
+        .btn-borrar-notifs:hover { background: rgba(231,76,60,0.15); }
+        .notif-item { padding: 12px 15px; border-bottom: 1px solid #222; font-size: 0.85rem; color: #888; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 8px; transition: background 0.2s; }
+        .notif-item:hover { background: #1a1a1a; }
+        .notif-no-leida { background: rgba(255,255,255,0.04); color: #fff; }
+        .notif-no-leida:hover { background: rgba(255,255,255,0.08); }
+        .notif-punto { width: 7px; height: 7px; border-radius: 50%; background: #e74c3c; flex-shrink: 0; }
+        .notif-punto-leido { width: 7px; height: 7px; border-radius: 50%; background: transparent; flex-shrink: 0; }
+
+        .filtros-container { display: flex; gap: 8px; width: 100%; max-width: 500px; margin-top: 15px; margin-bottom: 15px; }
+        #buscador { flex: 2; background: #111; border: 1px solid #333; color: white; padding: 12px; border-radius: 12px; outline: none; }
+        #calendario { flex: 1; background: #111; border: 1px solid #333; color-scheme: dark; color: white; padding: 10px; border-radius: 12px; }
+        .btn-limpiar { background: #222; color: #888; border: 1px solid #333; border-radius: 12px; padding: 0 15px; cursor: pointer; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; max-width: 500px; }
+        .tab-btn { flex: 1; padding: 12px; background: #111; border: 1px solid #333; color: #888; cursor: pointer; border-radius: 12px; font-weight: bold; }
+        .tab-btn.active { background: #eee; color: #000; border-color: #eee; }
+
+        #feed { width: 100%; max-width: 500px; }
+        .card { background: #111; border: 1px solid #333; border-radius: 18px; padding: 20px; margin-bottom: 12px; position: relative; animation: fadeIn 0.5s ease; transition: border 0.5s; }
+        .post-header { display: flex; justify-content: space-between; border-bottom: 1px solid #222; padding-bottom: 12px; margin-bottom: 15px; }
+        .avatar-emoji { width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; }
+        .post-info { flex: 1; margin-left: 12px; }
+        .post-autor { font-size: 0.85rem; color: #888; margin-bottom: 2px; }
+        .post-level { display: inline-block; padding: 4px 8px; background: rgba(255,255,255,0.1); border-radius: 6px; font-size: 0.75rem; color: #2ecc71; margin-left: 5px; font-weight: bold; }
+        .post-hora { font-size: 0.8rem; color: #555; }
+        .post-menu { position: relative; }
+        .btn-menu { background: none; border: none; font-size: 1.2rem; color: #555; cursor: pointer; padding: 0; }
+        .menu-opciones { display: none; position: absolute; top: 25px; right: 0; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.8); }
+        .menu-opciones button { display: block; width: 100%; text-align: left; padding: 12px 16px; border: none; background: none; color: #888; cursor: pointer; font-size: 0.85rem; }
+        .menu-opciones button:first-child { border-radius: 11px 11px 0 0; }
+        .menu-opciones button:last-child { border-radius: 0 0 11px 11px; }
+        .menu-opciones button:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .menu-opciones button.peligro { color: #e74c3c; }
+
+        .post-contenido { font-size: 1rem; line-height: 1.5; margin-bottom: 15px; word-wrap: break-word; }
+        .contador-contenido { font-size: 0.75rem; color: #555; text-align: right; margin-bottom: 10px; }
+
+        .reactions-container { display: flex; gap: 8px; flex-wrap: wrap; margin: 15px 0; }
+        .reaction-btn { display: flex; align-items: center; gap: 5px; padding: 8px 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+        .reaction-btn:hover { border-color: #555; background: #222; }
+        .reaction-btn.active { border-color: #2ecc71; background: rgba(46,204,113,0.2); }
+        .reaction-emoji { font-size: 1.1rem; }
+        .reaction-count { font-size: 0.85rem; color: #888; }
+        .reaction-btn.active .reaction-count { color: #2ecc71; }
+
+        .reply-section { margin-top: 15px; padding-top: 15px; border-top: 1px solid #222; }
+        .reply-input { width: 100%; background: #0a0a0a; border: 1px solid #222; color: white; padding: 10px; border-radius: 12px; outline: none; margin-bottom: 8px; }
+        .btn-responder { width: 100%; padding: 10px; background: #2ecc71; color: #000; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
+
+        .comentarios-container { margin-top: 15px; padding-top: 15px; border-top: 1px solid #222; }
+        .comentario { background: #0a0a0a; border-left: 2px solid #333; padding: 12px; margin-bottom: 10px; border-radius: 8px; }
+        .comentario-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .comentario-autor { font-size: 0.85rem; color: #888; }
+        .comentario-hora { font-size: 0.75rem; color: #555; }
+        .comentario-menu { position: relative; }
+        .btn-menu-comentario { background: none; border: none; font-size: 1rem; color: #555; cursor: pointer; }
+        .comentario-contenido { font-size: 0.95rem; line-height: 1.4; }
+
+        .pagination { display: flex; gap: 10px; margin: 30px 0; width: 100%; max-width: 500px; justify-content: center; }
+        .btn-pagination { padding: 10px 16px; background: #111; border: 1px solid #333; color: #888; border-radius: 12px; cursor: pointer; }
+        .btn-pagination:hover { border-color: #555; color: #fff; }
+        .btn-pagination.activa { background: #eee; color: #000; border-color: #eee; }
+        .btn-pagination:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
+            background: #111; border-top: 1px solid #333; display: flex;
+            justify-content: space-around; align-items: center; z-index: 2000;
+        }
+        .nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; color: #888; text-decoration: none; font-size: 0.75rem; flex: 1; }
+        .nav-item:hover { color: #fff; }
+        .nav-item.active { color: #2ecc71; }
+        .nav-item-icon { font-size: 1.3rem; }
+
+        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; padding: 12px 20px; border-radius: 12px; z-index: 4500; border: 1px solid #333; animation: slideDown 0.3s ease; }
+
+        .publicar-btn {
+            position: fixed; bottom: 80px; right: 20px; width: 60px; height: 60px;
+            background: #2ecc71; border: none; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-size: 2rem;
+            box-shadow: 0 8px 24px rgba(46,204,113,0.3); z-index: 1500;
+            transition: transform 0.2s;
+        }
+        .publicar-btn:active { transform: scale(0.95); }
+
+        #ad-banner {
+            position: fixed; bottom: 60px; left: 0; width: 100%; background: #111; border-top: 1px solid #333;
+            padding: 10px 0; z-index: 1400;
+        }
+
+        .modal-overlay.visible { display: flex; }
+        .app-modal.visible { display: flex; }
+
+        .header-container.relative { position: relative; }
+
+        @media (max-width: 600px) {
+            body { padding-left: 15px; padding-right: 15px; }
+            .modal-contenido { border-radius: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <div class="splash-contenido">
+            <div class="splash-logo">🗨️</div>
+            <h2 class="splash-titulo">CHISMECITOS</h2>
+            <p class="splash-subtitulo">Contalo sin miedo</p>
+        </div>
+    </div>
+
+    <!-- Modal de Términos -->
+    <div id="modal-terminos" class="modal-overlay">
+        <div class="modal-contenido">
+            <h2>Términos & Privacidad</h2>
+            <div class="texto-terminos">
+                <p><strong>¡Bienvenido a Chismecitos!</strong></p>
+                <p>Chismecitos es una plataforma anónima donde podés compartir chismes y gossip de tu comunidad sin revelar tu identidad.</p>
+                <ul>
+                    <li>No recopilamos datos personales.</li>
+                    <li>Los posts son permanentes a menos que los borres.</li>
+                    <li>Gana XP y sube de nivel con tu actividad.</li>
+                    <li>Reportá contenido inapropiado.</li>
+                </ul>
+                <p><strong>Divertite, pero respetá a otros usuarios. ¡Contá sin miedo!</strong></p>
+            </div>
+            <div class="modal-botones">
+                <button class="btn-aceptar" onclick="aceptarTerminos()">Aceptar</button>
+                <button class="btn-rechazar" onclick="rechazarTerminos()">Salir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Publicar -->
+    <div id="modal-publicar" class="app-modal">
+        <div class="modal-box">
+            <h2 style="margin-top: 0; border-bottom: 1px solid #222; padding-bottom: 10px;">Nuevo Chisme</h2>
+            <div style="display: flex; gap: 15px; margin: 20px 0;">
+                <img id="avatar-preview" style="width: 50px; height: 50px; border-radius: 10px; display: none;">
+                <div id="avatar-fallback" style="width: 50px; height: 50px; border-radius: 10px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 2rem;"></div>
+            </div>
+            <textarea id="texto-nuevo-chisme" class="textarea-pub" placeholder="¿Qué chisme querés compartir?" maxlength="700"></textarea>
+            <div class="contador-contenido" id="contador-chisme">0/700</div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="cerrarModalGeneral('modal-publicar')" style="flex: 1; padding: 12px; background: #222; color: #888; border: none; border-radius: 12px; cursor: pointer;">Cancelar</button>
+                <button onclick="confirmarEnvioChisme()" style="flex: 1; padding: 12px; background: #2ecc71; color: #000; border: none; border-radius: 12px; cursor: pointer; font-weight: bold;">Publicar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header-container relative">
+        <div class="logo-clickable" onclick="location.reload()">
+            <h1>🗨️ CHISMECITOS</h1>
+        </div>
+        <div class="nav-icons">
+            <button class="btn-icon" onclick="toggleNotificaciones()">🔔
+                <span class="badge" id="notif-badge"></span>
+            </button>
+        </div>
+        <div id="panel-notificaciones">
+            <div class="notif-header">
+                <span>Notificaciones</span>
+                <button class="btn-borrar-notifs" onclick="borrarTodosNotificaciones()">Limpiar</button>
+            </div>
+            <div id="lista-notificaciones"></div>
+        </div>
+    </div>
+
+    <!-- Status Online -->
+    <div id="status-online">
+        <span class="punto-verde"></span>
+        <span id="online-count">0 online</span>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filtros-container">
+        <input type="text" id="buscador" placeholder="🔍 Buscar...">
+        <input type="date" id="calendario">
+        <button class="btn-limpiar" onclick="limpiarFiltros()">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="cambiarTab('todos')">Todos</button>
+        <button class="tab-btn" onclick="cambiarTab('amigos')">Tendencia</button>
+        <button class="tab-btn" onclick="cambiarTab('siguiendo')">Recientes</button>
+    </div>
+
+    <!-- Feed -->
+    <div id="feed"></div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+    <!-- Ad Banner -->
+    <div id="ad-banner">
+        <ins class="adsbygoogle"
+             style="display:block; margin: 0 auto;"
+             data-ad-client="ca-pub-3371788247358319"
+             data-ad-slot="1580403146"
+             data-ad-format="horizontal"
+             data-full-width-responsive="true"></ins>
+        <script>
+            (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="cambiarTab('todos')">
+            <span class="nav-item-icon">🏠</span>
+            <span>Inicio</span>
+        </div>
+        <div class="nav-item" onclick="abrirPerfil()">
+            <span class="nav-item-icon">👤</span>
+            <span>Perfil</span>
+        </div>
+    </div>
+
+    <!-- FAB Publicar -->
+    <button class="publicar-btn" onclick="publicarChisme()">➕</button>
+
+    <script>
+        // =====================================================================
+        // CONFIGURACIÓN INICIAL
+        // =====================================================================
+        const SUPABASE_URL = 'https://guunbgwzfpeilkybjnun.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1dW5iZ3d6ZnBlaWxreWJqbnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MDM0OTUsImV4cCI6MjA4NTk3OTQ5NX0.jtwCsWlzSYMLngVs_CzlhhiOerk0xr2pfamIiT9z20c';
+
+        const { createClient } = window.supabase;
+        const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let MI_ID = null;
+        let paginaActual = 0;
+        const POSTS_POR_PAGINA = 20;
+        let avatarSeedActual = null;
+        let tabActual = 'todos';
+        let filtroTexto = '';
+        let filtroFecha = '';
+
+        // =====================================================================
+        // INICIALIZACIÓN
+        // =====================================================================
+        async function inicializarApp() {
+            await generarOObtenerID();
+            const aceptoTerminos = localStorage.getItem('aceptoTerminos');
+            if (!aceptoTerminos) {
+                document.getElementById('modal-terminos').classList.add('visible');
+            } else {
+                document.getElementById('splash-screen').classList.add('splash-hidden');
+                cargarPosts();
+                chequearNotificaciones();
+                setInterval(chequearNotificaciones, 10000);
+                setInterval(actualizarPresencia, 60000);
+                setInterval(obtenerUsuariosActivos, 30000);
+                inicializarAvatarModal();
+            }
+        }
+
+        async function generarOObtenerID() {
+            let id = localStorage.getItem('user_id');
+            if (!id) {
+                id = 'user_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('user_id', id);
+                const { error } = await db.from('perfiles').insert([{
+                    id: id,
+                    avatar_seed: Math.random().toString(36).substr(2, 9),
+                    nivel: 1,
+                    xp: 0
+                }]);
+                if (error) console.error('Error creando perfil:', error);
+            }
+            MI_ID = id;
+        }
+
+        function aceptarTerminos() {
+            localStorage.setItem('aceptoTerminos', 'true');
+            document.getElementById('modal-terminos').classList.remove('visible');
+            document.getElementById('splash-screen').classList.add('splash-hidden');
+            cargarPosts();
+            chequearNotificaciones();
+            setInterval(chequearNotificaciones, 10000);
+            setInterval(actualizarPresencia, 60000);
+            setInterval(obtenerUsuariosActivos, 30000);
+            inicializarAvatarModal();
+        }
+
+        function rechazarTerminos() {
+            mostrarToastError('Debes aceptar los términos para continuar.');
+        }
+
+        // =====================================================================
+        // FUNCIONES UTILITARIAS
+        // =====================================================================
+        function obtenerEmojiRespaldo(seed) {
+            const emojis = ['😀', '😎', '🤖', '👽', '🐸', '🦊', '🐱', '🐶', '🐹', '🐰'];
+            const index = parseInt(seed) % emojis.length;
+            return emojis[index];
+        }
+
+        function generarAvatarDiceBear(seed) {
+            return `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+        }
+
+        function mostrarToast(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function mostrarToastError(msg) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = msg;
+            toast.style.background = '#e74c3c';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function solicitarConfirmacion(titulo, msg, callback) {
+            if (confirm(`${titulo}\n\n${msg}`)) callback();
+        }
+
+        function abrirModalGeneral(id) {
+            document.getElementById(id).classList.add('visible');
+        }
+
+        function cerrarModalGeneral(id) {
+            document.getElementById(id).classList.remove('visible');
+        }
+
+        function cambiarTab(tab) {
+            tabActual = tab;
+            paginaActual = 0;
+            cargarPosts();
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function limpiarFiltros() {
+            filtroTexto = '';
+            filtroFecha = '';
+            document.getElementById('buscador').value = '';
+            document.getElementById('calendario').value = '';
+            paginaActual = 0;
+            cargarPosts();
+        }
+
+        // =====================================================================
+        // CARGAR POSTS
+        // =====================================================================
+        async function cargarPosts() {
+            try {
+                let query = db.from('publicaciones').select('*').order('created_at', { ascending: false });
+
+                const reportados = obtenerPostsReportados();
+                if (reportados.length > 0) {
+                    query = query.not('id', 'in', `(${reportados.join(',')})`);
+                }
+
+                const { data: posts, error } = await query;
+                if (error) throw error;
+
+                let postsFiltered = posts || [];
+                if (filtroTexto) {
+                    postsFiltered = postsFiltered.filter(p => p.contenido.toLowerCase().includes(filtroTexto.toLowerCase()));
+                }
+                if (filtroFecha) {
+                    postsFiltered = postsFiltered.filter(p => new Date(p.created_at).toDateString() === new Date(filtroFecha).toDateString());
+                }
+
+                const inicio = paginaActual * POSTS_POR_PAGINA;
+                const fin = inicio + POSTS_POR_PAGINA;
+                const postsPagina = postsFiltered.slice(inicio, fin);
+
+                const feed = document.getElementById('feed');
+                feed.innerHTML = '';
+
+                for (const post of postsPagina) {
+                    const { data: comentarios } = await db.from('comentarios').select('*').eq('id_post', post.id).order('created_at', { ascending: true });
+                    feed.appendChild(crearCardPost(post, comentarios || []));
+                }
+
+                renderizarPaginacion(postsFiltered.length);
+            } catch(e) {
+                console.error('Error cargando posts:', e);
+                mostrarToastError('Error al cargar posts.');
+            }
+        }
+
+        function crearCardPost(post, comentarios) {
+            const card = document.createElement('div');
+            card.id = `post-${post.id}`;
+            card.className = 'card';
+
+            const fecha = new Date(post.created_at);
+            const horaFormato = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+            card.innerHTML = `
+                <div class="post-header">
+                    <div style="display: flex;">
+                        <img src="${generarAvatarDiceBear(post.icono)}" style="width: 45px; height: 45px; border-radius: 10px; object-fit: cover; display: none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                        <div class="avatar-emoji" style="display: flex;">${obtenerEmojiRespaldo(post.icono)}</div>
+                    </div>
+                    <div class="post-info">
+                        <div class="post-autor">Anónimo <span class="post-level">Nivel ${post.nivel_autor || 1}</span></div>
+                        <div class="post-hora">${horaFormato}</div>
+                    </div>
+                    <div class="post-menu">
+                        <button class="btn-menu" onclick="toggleMenu(${post.id})">⋮</button>
+                        <div class="menu-opciones" id="menu-${post.id}">
+                            ${post.id_autor === MI_ID ? `<button onclick="borrarPost(${post.id})">Borrar</button>` : ''}
+                            <button class="peligro" onclick="reportarPost(${post.id})">Reportar</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="post-contenido">${post.contenido}</div>
+                <div class="contador-contenido">${post.contenido.length}/700</div>
+                <div class="reactions-container" id="reactions-${post.id}"></div>
+                <div class="comentarios-container" id="comentarios-${post.id}"></div>
+                <div class="reply-section">
+                    <input type="text" class="reply-input" placeholder="Comenta algo..." id="reply-input-${post.id}">
+                    <button class="btn-responder" onclick="enviarComentario(${post.id})">Comentar</button>
+                </div>
+            `;
+
+            renderizarReacciones(post.id, card);
+            renderizarComentarios(post.id, comentarios, card);
+
+            return card;
+        }
+
+        async function renderizarReacciones(postId, card) {
+            const reacciones = ['✅', '❌', '😂', '😢', '🤬'];
+            const container = card.querySelector(`#reactions-${postId}`);
+
+            const { data: reaccs } = await db.from('reacciones').select('*').eq('id_post', postId);
+            const reaccionesActuales = reaccs || [];
+
+            for (const emoji of reacciones) {
+                const count = reaccionesActuales.filter(r => r.emoji === emoji).length;
+                const yaReaccione = reaccionesActuales.some(r => r.emoji === emoji && r.id_usuario === MI_ID);
+
+                const btn = document.createElement('button');
+                btn.className = `reaction-btn ${yaReaccione ? 'active' : ''}`;
+                btn.classList.add('btn-pop');
+                btn.innerHTML = `<span class="reaction-emoji">${emoji}</span><span class="reaction-count">${count}</span>`;
+                btn.onclick = async () => {
+                    if (yaReaccione) {
+                        await db.from('reacciones').delete().eq('id_post', postId).eq('emoji', emoji).eq('id_usuario', MI_ID);
+                    } else {
+                        await db.from('reacciones').insert([{ id_post: postId, emoji, id_usuario: MI_ID }]);
+                    }
+                    cargarPosts();
+                };
+
+                container.appendChild(btn);
+            }
+        }
+
+        async function renderizarComentarios(postId, comentarios, card) {
+            const container = card.querySelector(`#comentarios-${postId}`);
+            container.innerHTML = '';
+
+            if (comentarios.length === 0) {
+                container.innerHTML = '<p style="color: #555; font-size: 0.85rem;">Sin comentarios aún.</p>';
+                return;
+            }
+
+            for (const com of comentarios.slice(0, 5)) {
+                const fecha = new Date(com.created_at);
+                const hora = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+
+                const divCom = document.createElement('div');
+                divCom.className = 'comentario';
+                divCom.innerHTML = `
+                    <div class="comentario-header">
+                        <div>
+                            <span class="comentario-autor">Anónimo</span>
+                            <span class="comentario-hora">${hora}</span>
+                        </div>
+                        <div class="comentario-menu">
+                            <button class="btn-menu-comentario" onclick="toggleMenuComentario(${com.id})">⋮</button>
+                            <div class="menu-opciones" id="menu-com-${com.id}">
+                                ${com.id_autor === MI_ID ? `<button onclick="borrarComentario(${com.id})">Borrar</button>` : ''}
+                                <button class="peligro" onclick="reportarComentario(${com.id})">Reportar</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="comentario-contenido">${com.contenido}</div>
+                `;
+
+                container.appendChild(divCom);
+            }
+
+            if (comentarios.length > 5) {
+                const verMas = document.createElement('button');
+                verMas.style.cssText = 'background: #222; color: #888; border: 1px solid #333; border-radius: 12px; padding: 8px 16px; cursor: pointer; width: 100%; margin-top: 10px;';
+                verMas.textContent = `Ver los ${comentarios.length - 5} comentarios restantes`;
+                container.appendChild(verMas);
+            }
+        }
+
+        function toggleMenu(postId) {
+            const menu = document.getElementById(`menu-${postId}`);
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        }
+
+        function toggleMenuComentario(comId) {
+            const menu = document.getElementById(`menu-com-${comId}`);
+            menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+        }
+
+        async function enviarComentario(postId) {
+            const input = document.getElementById(`reply-input-${postId}`);
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            const { error } = await db.from('comentarios').insert([{
+                id_post: postId,
+                id_autor: MI_ID,
+                contenido: texto
+            }]);
+
+            if (error) {
+                mostrarToastError('Error al comentar.');
+            } else {
+                input.value = '';
+                await sumarXP(5);
+                cargarPosts();
+            }
+        }
+
+        function obtenerPostsReportados() {
+            try { return JSON.parse(localStorage.getItem('posts_reportados') || '[]'); } catch(e) { return []; }
+        }
+
+        async function borrarPost(id) {
+            if (confirm('¿Borrar chisme?')) {
+                await db.from('publicaciones').delete().eq('id', id);
+                await sumarXP(-15);
+                cargarPosts();
+            }
+        }
+
+        async function borrarComentario(id) {
+            if (confirm('¿Borrar comentario?')) {
+                await db.from('comentarios').delete().eq('id', id);
+                await sumarXP(-10);
+                cargarPosts();
+            }
+        }
+
+        async function reportarPost(id) {
+            if (confirm('¿Reportar chisme?')) {
+                await db.from('reportes').insert([{ id_publicacion: id }]);
+                const reportados = obtenerPostsReportados();
+                if (!reportados.includes(id)) {
+                    reportados.push(id);
+                    localStorage.setItem('posts_reportados', JSON.stringify(reportados));
+                }
+                document.getElementById(`post-${id}`).remove();
+                mostrarToastError('✅ Reportado.');
+            }
+        }
+
+        function reportarComentario(id) {
+            mostrarToastError('✅ Comentario reportado.');
+        }
+
+        // =====================================================================
+        // NOTIFICACIONES
+        // =====================================================================
+        async function chequearNotificaciones() {
+            const { data: notifs } = await db.from('notificaciones').select('*').eq('id_usuario', MI_ID).order('created_at', { ascending: false });
+            const lista = document.getElementById('lista-notificaciones');
+            lista.innerHTML = '';
+
+            if (!notifs || notifs.length === 0) {
+                lista.innerHTML = '<p style="color: #555; padding: 15px; text-align: center; font-size: 0.85rem;">Sin notificaciones</p>';
+                return;
+            }
+
+            const badge = document.getElementById('notif-badge');
+            const noLeidas = notifs.filter(n => !n.leida).length;
+            if (noLeidas > 0) {
+                badge.style.display = 'block';
+            }
+
+            for (const n of notifs.slice(0, 10)) {
+                const item = document.createElement('div');
+                item.className = `notif-item ${n.leida ? '' : 'notif-no-leida'}`;
+                item.innerHTML = `
+                    <span class="${n.leida ? 'notif-punto-leido' : 'notif-punto'}"></span>
+                    <span>${n.mensaje}</span>
+                `;
+                item.onclick = async () => {
+                    if (!n.leida) {
+                        await db.from('notificaciones').update({ leida: true }).eq('id', n.id);
+                    }
+                };
+                lista.appendChild(item);
+            }
+        }
+
+        async function borrarTodosNotificaciones() {
+            await db.from('notificaciones').delete().eq('id_usuario', MI_ID);
+            chequearNotificaciones();
+        }
+
+        function toggleNotificaciones() {
+            const panel = document.getElementById('panel-notificaciones');
+            panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+        }
+
+        // =====================================================================
+        // AVATAR Y PERFIL
+        // =====================================================================
+        async function inicializarAvatarModal() {
+            const { data: perfil } = await db.from('perfiles').select('avatar_seed').eq('id', MI_ID).single();
+            if (perfil) {
+                avatarSeedActual = perfil.avatar_seed;
+            } else {
+                avatarSeedActual = Math.random().toString(36).substr(2, 9);
+                await db.from('perfiles').update({ avatar_seed: avatarSeedActual }).eq('id', MI_ID);
+            }
+
+            const preview = document.getElementById('avatar-preview');
+            const fallback = document.getElementById('avatar-fallback');
+            if (preview) {
+                preview.src = generarAvatarDiceBear(avatarSeedActual);
+                preview.style.display = 'block';
+                if (fallback) fallback.style.display = 'none';
+                preview.onerror = function() {
+                    preview.style.display = 'none';
+                    if (fallback) {
+                        fallback.textContent = obtenerEmojiRespaldo(avatarSeedActual);
+                        fallback.style.display = 'flex';
+                    }
+                };
+            }
+        }
+
+        async function confirmarEnvioChisme() {
+            const t = document.getElementById('texto-nuevo-chisme').value.trim();
+            if (!t) return;
+            if (t.length > 700) {
+                mostrarToastError("El chisme no puede superar los 700 caracteres.");
+                return;
+            }
+
+            const COOLDOWN_POST = 5 * 60 * 1000;
+            const ultimoPost = parseInt(localStorage.getItem('ultimo_post_ts') || '0');
+            const tiempoRestantePost = COOLDOWN_POST - (Date.now() - ultimoPost);
+            if (tiempoRestantePost > 0) {
+                const mins = Math.floor(tiempoRestantePost / 60000);
+                const segs = Math.ceil((tiempoRestantePost % 60000) / 1000);
+                const msg = mins > 0
+                    ? `⏳ Esperá ${mins} min ${segs > 0 ? segs + ' seg' : ''} para publicar otro chisme.`
+                    : `⏳ Esperá ${segs} segundos para publicar otro chisme.`;
+                mostrarToastError(msg.trim());
+                return;
+            }
+
+            try {
+                const { data: perfil } = await db.from('perfiles').select('nivel').eq('id', MI_ID).single();
+                const nivelActual = perfil?.nivel || 1;
+
+                const { error } = await db.from('publicaciones').insert([{
+                    contenido: t,
+                    id_autor: MI_ID,
+                    icono: avatarSeedActual,
+                    nivel_autor: nivelActual
+                }]);
+
+                if (error) throw error;
+                localStorage.setItem('ultimo_post_ts', Date.now().toString());
+                await sumarXP(10);
+                document.getElementById('texto-nuevo-chisme').value = '';
+                cerrarModalGeneral('modal-publicar');
+                cargarPosts();
+            } catch(e) {
+                console.error("Error publicando chisme:", e);
+                mostrarToastError("Error al publicar. Intentá de nuevo.");
+            }
+        }
+
+        async function abrirPerfil() {
+            const { data: perfil } = await db.from('perfiles').select('*').eq('id', MI_ID).single();
+            alert(`👤 Tu Perfil\n\nID: ${MI_ID}\nNivel: ${perfil?.nivel || 1}\nXP: ${perfil?.xp || 0}\n\nSiguiendo siendo anónimo, solo vos podés ver esto.`);
+        }
+
+        async function sumarXP(cantidad) {
+            const { data: perfil } = await db.from('perfiles').select('xp, nivel').eq('id', MI_ID).single();
+            let xp = (perfil?.xp || 0) + cantidad;
+            let nivel = perfil?.nivel || 1;
+
+            while (xp >= 100) {
+                xp -= 100;
+                nivel += 1;
+                mostrarToast(`⬆️ ¡Subiste a nivel ${nivel}!`);
+            }
+
+            await db.from('perfiles').update({ xp, nivel }).eq('id', MI_ID);
+        }
+
+        async function obtenerUsuariosActivos() {
+            const { data: usuarios } = await db.from('presencia').select('*').gt('ultima_actividad', new Date(Date.now() - 5 * 60 * 1000).toISOString());
+            const count = usuarios?.length || 0;
+            document.getElementById('online-count').textContent = `${count} online`;
+        }
+
+        async function actualizarPresencia() {
+            const { error } = await db.from('presencia').upsert({
+                id_usuario: MI_ID,
+                ultima_actividad: new Date().toISOString()
+            });
+            if (error) console.error('Error actualizando presencia:', error);
+        }
+
+        function publicarChisme() {
+            inicializarAvatarModal();
+            abrirModalGeneral('modal-publicar');
+            document.getElementById('texto-nuevo-chisme').focus();
+        }
+
+        function renderizarPaginacion(total) {
+            const totalPaginas = Math.ceil(total / POSTS_POR_PAGINA);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            for (let i = 0; i < totalPaginas; i++) {
+                const btn = document.createElement('button');
+                btn.className = `btn-pagination ${i === paginaActual ? 'activa' : ''}`;
+                btn.textContent = i + 1;
+                btn.onclick = () => {
+                    paginaActual = i;
+                    cargarPosts();
+                };
+                pagination.appendChild(btn);
+            }
+        }
+
+        // Iniciar la app
+        window.addEventListener('load', inicializarApp);
+
+        // Event listeners
+        document.getElementById('buscador').addEventListener('input', (e) => {
+            filtroTexto = e.target.value;
+            paginaActual = 0;
+            cargarPosts();
+        });
+
+        document.getElementById('calendario').addEventListener('change', (e) => {
+            filtroFecha = e.target.value;
+            paginaActual = 0;
+            cargarPosts();
+        });
+
+        // Actualizar contador de caracteres
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'texto-nuevo-chisme') {
+                const count = e.target.value.length;
+                document.getElementById('contador-chisme').textContent = `${count}/700`;
+            }
+        });
+
+        // Cerrar menus al hacer click afuera
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.post-menu') && !e.target.closest('.menu-opciones')) {
+                document.querySelectorAll('.menu-opciones').forEach(m => m.style.display = 'none');
+            }
+        });
+    </script>
+</body>
+</html>

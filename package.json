@@ -1,0 +1,12 @@
+{
+  "name": "chismecitos-web",
+  "version": "1.0.0",
+  "description": "Chismecitos - La red social anónima para chismes. Versión Web",
+  "author": "Polo",
+  "private": true,
+  "keywords": ["chismes", "gossip", "anonymous", "social-network"],
+  "scripts": {
+    "dev": "npx http-server",
+    "build": "echo 'Static site - no build needed'"
+  }
+}
